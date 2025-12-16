@@ -1,0 +1,77 @@
+[project]
+name = "redis-timers"
+version="0"
+description = ""
+authors = [
+    { name = "Artur Shiriev", email = "me@shiriev.ru" },
+]
+readme = "README.md"
+requires-python = ">=3.13,<4"
+license = "MIT"
+dependencies = [
+    "pydantic",
+    "redis",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+]
+lint = [
+    # linters
+    "ruff",
+    "mypy",
+    "end-of-file-fixer",
+    # stubs
+    "types-redis",
+]
+
+[build-system]
+requires = ["uv_build"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "redis_timers"
+module-root = ""
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+
+[tool.ruff]
+fix = true
+unsafe-fixes = true
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "D1", # allow missing docstrings
+    "FBT", # allow boolean args
+    "TRY003", # allow long exception messages
+    "EM102", # allow f-string for exception message
+    "D203", # "one-blank-line-before-class" conflicting with D211
+    "D212", # "multi-line-summary-second-line" conflicting with D213
+    "COM812", # flake8-commas "Trailing comma missing"
+    "ISC001", # flake8-implicit-str-concat
+    "G004", # Logging statement uses f-string
+]
+isort.lines-after-imports = 2
+isort.no-lines-before = ["standard-library", "local-folder"]
+
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/*.py" = [
+    "S101", # allow asserts
+    "PLR2004", # allow magic values
+]
+
+[tool.pytest.ini_options]
+addopts = "--cov=. --cov-report term-missing"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.report]
+exclude_also = ["if typing.TYPE_CHECKING:"]
