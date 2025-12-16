@@ -1,4 +1,5 @@
 import datetime
+import os
 from collections.abc import AsyncGenerator
 
 import pydantic
@@ -37,7 +38,7 @@ class HandlerResults:
 
 @pytest.fixture
 async def redis_client() -> AsyncGenerator["aioredis.Redis[str]"]:
-    client = aioredis.Redis(host="redis", port=6379, db=0, decode_responses=True)
+    client = aioredis.Redis.from_url(url=os.getenv("REDIS_URL", ""), decode_responses=True)
     try:
         await client.delete(settings.TIMERS_TIMELINE_KEY, settings.TIMERS_PAYLOADS_KEY)
         yield client
