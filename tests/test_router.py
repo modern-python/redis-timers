@@ -13,10 +13,10 @@ class AnotherSchema(pydantic.BaseModel):
     count: int
 
 
-def test_register_handler_with_name() -> None:
+def test_register_handler() -> None:
     router: typing.Final = Router()
 
-    @router.handler(name="test_timer", schema=SomeSchema)
+    @router.handler(topic="test_timer", schema=SomeSchema)
     async def test_handler(data: SomeSchema) -> None: ...
 
     assert len(router.handlers) == 1
@@ -26,27 +26,14 @@ def test_register_handler_with_name() -> None:
     assert handler.handler == test_handler
 
 
-def test_register_handler_without_name() -> None:
-    router: typing.Final = Router()
-
-    @router.handler(schema=SomeSchema)
-    async def my_timer_handler(data: SomeSchema) -> None: ...
-
-    assert len(router.handlers) == 1
-    handler: typing.Final = router.handlers[0]
-    assert handler.topic == "my_timer_handler"
-    assert handler.schema == SomeSchema
-    assert handler.handler == my_timer_handler
-
-
 def test_register_handler_multiple_handlers() -> None:
     router: typing.Final = Router()
     expected_handlers_count: typing.Final = 2
 
-    @router.handler(name="handler1", schema=SomeSchema)
+    @router.handler(topic="handler1", schema=SomeSchema)
     async def handler1(data: SomeSchema) -> None: ...
 
-    @router.handler(name="handler2", schema=AnotherSchema)
+    @router.handler(topic="handler2", schema=AnotherSchema)
     async def handler2(data: AnotherSchema) -> None: ...
 
     assert len(router.handlers) == expected_handlers_count

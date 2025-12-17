@@ -13,7 +13,7 @@ class Router:
     def handler[T: pydantic.BaseModel](
         self,
         *,
-        name: str | None = None,
+        topic: str,
         schema: type[T],
     ) -> typing.Callable[
         [typing.Callable[[T], typing.Coroutine[None, None, None]]],
@@ -24,7 +24,7 @@ class Router:
         ) -> typing.Callable[[T], typing.Coroutine[None, None, None]]:
             self.handlers.append(
                 Handler(
-                    topic=name or func.__name__,
+                    topic=topic,
                     schema=schema,
                     handler=func,
                 )

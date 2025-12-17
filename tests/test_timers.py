@@ -16,7 +16,7 @@ MULTIPLE_TIMERS_COUNT = 2
 DUPLICATE_TIMER_COUNT = 2
 
 
-class TestPayloadModel(pydantic.BaseModel):
+class SomePayloadModel(pydantic.BaseModel):
     message: str
     count: int
 
@@ -27,9 +27,9 @@ class AnotherPayloadModel(pydantic.BaseModel):
 
 class HandlerResults:
     def __init__(self) -> None:
-        self.results: list[TestPayloadModel | AnotherPayloadModel] = []
+        self.results: list[SomePayloadModel | AnotherPayloadModel] = []
 
-    def add_result(self, result: TestPayloadModel | AnotherPayloadModel) -> None:
+    def add_result(self, result: SomePayloadModel | AnotherPayloadModel) -> None:
         self.results.append(result)
 
     def clear(self) -> None:
@@ -43,7 +43,7 @@ async def redis_client() -> AsyncGenerator["aioredis.Redis[str]"]:
         await client.delete(settings.TIMERS_TIMELINE_KEY, settings.TIMERS_PAYLOADS_KEY)
         yield client
     finally:
-        await client.close()
+        await client.aclose()  # type: ignore[attr-defined]
 
 
 @pytest.fixture
@@ -57,13 +57,13 @@ async def handler_results() -> AsyncGenerator[HandlerResults]:
 def timers_instance(redis_client: "aioredis.Redis[str]", handler_results: HandlerResults) -> Timers:
     router1 = Router()
 
-    @router1.handler(schema=TestPayloadModel)
-    async def test_handler(data: TestPayloadModel) -> None:
+    @router1.handler(topic="some_topic", schema=SomePayloadModel)
+    async def test_handler(data: SomePayloadModel) -> None:
         handler_results.add_result(data)
 
     router2 = Router()
 
-    @router2.handler(name="another_topic", schema=AnotherPayloadModel)
+    @router2.handler(topic="another_topic", schema=AnotherPayloadModel)
     async def another_handler(data: AnotherPayloadModel) -> None:
         handler_results.add_result(data)
 
@@ -75,25 +75,25 @@ def timers_instance(redis_client: "aioredis.Redis[str]", handler_results: Handle
 
 
 async def test_set_and_remove_timer(timers_instance: Timers) -> None:
-    payload = TestPayloadModel(message="test", count=1)
+    payload = SomePayloadModel(message="test", count=1)
     await timers_instance.set_timer(
-        topic="test_handler", timer_id="test_timer_1", payload=payload, activation_period=datetime.timedelta(seconds=1)
+        topic="some_topic", timer_id="test_timer_1", payload=payload, activation_period=datetime.timedelta(seconds=1)
     )
 
     # Check that timer exists in Redis
     timeline_keys, payloads_dict = await timers_instance.fetch_all_timers()
     assert len(timeline_keys) == 1
     timer_key = timeline_keys[0]
-    assert timer_key == "test_handler--test_timer_1"
+    assert timer_key == "some_topic--test_timer_1"
 
     # Check payloads has the timer data
     assert timer_key in payloads_dict
     payload_data = payloads_dict[timer_key]
-    parsed_payload = TestPayloadModel.model_validate_json(payload_data)
+    parsed_payload = SomePayloadModel.model_validate_json(payload_data)
     assert parsed_payload == payload
 
     # Remove the timer
-    await timers_instance.remove_timer(topic="test_handler", timer_id="test_timer_1")
+    await timers_instance.remove_timer(topic="some_topic", timer_id="test_timer_1")
 
     # Check that timer is removed from Redis
     timeline_keys, payloads_dict = await timers_instance.fetch_all_timers()
@@ -102,9 +102,9 @@ async def test_set_and_remove_timer(timers_instance: Timers) -> None:
 
 
 async def test_handle_ready_timers(timers_instance: Timers, handler_results: HandlerResults) -> None:
-    payload = TestPayloadModel(message="ready_timer", count=42)
+    payload = SomePayloadModel(message="ready_timer", count=42)
     await timers_instance.set_timer(
-        topic="test_handler",
+        topic="some_topic",
         timer_id="ready_timer_1",
         payload=payload,
         activation_period=datetime.timedelta(seconds=0),  # Ready immediately
@@ -117,7 +117,7 @@ async def test_handle_ready_timers(timers_instance: Timers, handler_results: Han
     assert handler_results.results
     assert len(handler_results.results) == 1
     result = handler_results.results[0]
-    assert isinstance(result, TestPayloadModel)
+    assert isinstance(result, SomePayloadModel)
     assert result == payload
 
     # Check that timer was removed from Redis
@@ -127,11 +127,11 @@ async def test_handle_ready_timers(timers_instance: Timers, handler_results: Han
 
 
 async def test_handle_multiple_ready_timers(timers_instance: Timers, handler_results: HandlerResults) -> None:
-    payload1 = TestPayloadModel(message="timer_1", count=1)
+    payload1 = SomePayloadModel(message="timer_1", count=1)
     payload2 = AnotherPayloadModel(value="timer_2")
 
     await timers_instance.set_timer(
-        topic="test_handler",
+        topic="some_topic",
         timer_id="multi_timer_1",
         payload=payload1,
         activation_period=datetime.timedelta(seconds=0),
@@ -150,9 +150,9 @@ async def test_handle_multiple_ready_timers(timers_instance: Timers, handler_res
 
 
 async def test_timer_not_ready_yet(timers_instance: Timers, handler_results: HandlerResults) -> None:
-    payload = TestPayloadModel(message="future_timer", count=99)
+    payload = SomePayloadModel(message="future_timer", count=99)
     await timers_instance.set_timer(
-        topic="test_handler",
+        topic="some_topic",
         timer_id="future_timer_1",
         payload=payload,
         activation_period=datetime.timedelta(seconds=10),
@@ -163,16 +163,16 @@ async def test_timer_not_ready_yet(timers_instance: Timers, handler_results: Han
     assert len(handler_results.results) == 0
     timeline_keys, payloads_dict = await timers_instance.fetch_all_timers()
     assert len(timeline_keys) == 1
-    timer_key = "test_handler--future_timer_1"
+    timer_key = "some_topic--future_timer_1"
     assert timer_key in payloads_dict
 
 
 async def test_remove_nonexistent_timer(timers_instance: Timers) -> None:
-    await timers_instance.remove_timer(topic="test_handler", timer_id="nonexistent_timer")
+    await timers_instance.remove_timer(topic="some_topic", timer_id="nonexistent_timer")
 
 
 async def test_set_timer_with_invalid_topic(timers_instance: Timers) -> None:
-    payload = TestPayloadModel(message="test", count=1)
+    payload = SomePayloadModel(message="test", count=1)
 
     with pytest.raises(RuntimeError, match="Handler is not found"):
         await timers_instance.set_timer(
@@ -194,17 +194,17 @@ async def test_empty_timeline_handling(timers_instance: Timers, handler_results:
 
 
 async def test_duplicate_timer_replacement(timers_instance: Timers, handler_results: HandlerResults) -> None:
-    payload1 = TestPayloadModel(message="first", count=1)
+    payload1 = SomePayloadModel(message="first", count=1)
     await timers_instance.set_timer(
-        topic="test_handler",
+        topic="some_topic",
         timer_id="duplicate_timer",
         payload=payload1,
         activation_period=datetime.timedelta(seconds=10),  # Far in future
     )
 
-    payload2 = TestPayloadModel(message="second", count=2)
+    payload2 = SomePayloadModel(message="second", count=2)
     await timers_instance.set_timer(
-        topic="test_handler",
+        topic="some_topic",
         timer_id="duplicate_timer",
         payload=payload2,
         activation_period=datetime.timedelta(seconds=0),  # Ready immediately
@@ -214,5 +214,5 @@ async def test_duplicate_timer_replacement(timers_instance: Timers, handler_resu
 
     assert len(handler_results.results) == 1
     result = handler_results.results[0]
-    assert isinstance(result, TestPayloadModel)
+    assert isinstance(result, SomePayloadModel)
     assert result == payload2
