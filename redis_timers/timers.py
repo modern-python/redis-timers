@@ -29,6 +29,7 @@ TIMEZONE = zoneinfo.ZoneInfo("UTC")
 @dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class Timers:
     redis_client: "aioredis.Redis[str]"
+    context: dict[str, typing.Any] = dataclasses.field(default_factory=dict)
     handlers_by_topics: dict[str, Handler[typing.Any]] = dataclasses.field(default_factory=dict, init=False)
 
     def include_router(self, router: Router) -> None:
@@ -72,7 +73,7 @@ class Timers:
             logger.exception(f"Failed to parse payload, {timer_key=}, {raw_payload=}")
             return
 
-        await handler.handler(payload)
+        await handler.handler(payload, self.context)
 
     async def handle_ready_timers(self) -> None:
         ready_timers = await self._fetch_ready_timers()
