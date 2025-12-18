@@ -3,6 +3,7 @@ import typing
 
 import pydantic
 
+from redis_timers import types
 from redis_timers.handler import Handler
 
 
@@ -15,13 +16,8 @@ class Router:
         *,
         topic: str,
         schema: type[T],
-    ) -> typing.Callable[
-        [typing.Callable[[T], typing.Coroutine[None, None, None]]],
-        typing.Callable[[T], typing.Coroutine[None, None, None]],
-    ]:
-        def _decorator(
-            func: typing.Callable[[T], typing.Coroutine[None, None, None]],
-        ) -> typing.Callable[[T], typing.Coroutine[None, None, None]]:
+    ) -> typing.Callable[[types.HandlerType[T]], types.HandlerType[T]]:
+        def _decorator(func: types.HandlerType[T]) -> types.HandlerType[T]:
             self.handlers.append(
                 Handler(
                     topic=topic,

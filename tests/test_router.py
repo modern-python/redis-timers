@@ -17,13 +17,13 @@ def test_register_handler() -> None:
     router: typing.Final = Router()
 
     @router.handler(topic="test_timer", schema=SomeSchema)
-    async def test_handler(data: SomeSchema) -> None: ...
+    async def some_handler(data: SomeSchema, _: dict[str, typing.Any]) -> None: ...
 
     assert len(router.handlers) == 1
     handler: typing.Final = router.handlers[0]
     assert handler.topic == "test_timer"
     assert handler.schema == SomeSchema
-    assert handler.handler == test_handler
+    assert handler.handler == some_handler
 
 
 def test_register_handler_multiple_handlers() -> None:
@@ -31,10 +31,10 @@ def test_register_handler_multiple_handlers() -> None:
     expected_handlers_count: typing.Final = 2
 
     @router.handler(topic="handler1", schema=SomeSchema)
-    async def handler1(data: SomeSchema) -> None: ...
+    async def handler1(data: SomeSchema, _: dict[str, typing.Any]) -> None: ...
 
     @router.handler(topic="handler2", schema=AnotherSchema)
-    async def handler2(data: AnotherSchema) -> None: ...
+    async def handler2(data: AnotherSchema, _: dict[str, typing.Any]) -> None: ...
 
     assert len(router.handlers) == expected_handlers_count
     assert router.handlers[0].topic == "handler1"

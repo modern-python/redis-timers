@@ -1,5 +1,6 @@
 import datetime
 import os
+import typing
 from collections.abc import AsyncGenerator
 
 import pydantic
@@ -58,16 +59,18 @@ def timers_instance(redis_client: "aioredis.Redis[str]", handler_results: Handle
     router1 = Router()
 
     @router1.handler(topic="some_topic", schema=SomePayloadModel)
-    async def test_handler(data: SomePayloadModel) -> None:
+    async def some_handler(data: SomePayloadModel, context: dict[str, typing.Any]) -> None:
         handler_results.add_result(data)
+        assert context["some_key"] == "some_value"
 
     router2 = Router()
 
     @router2.handler(topic="another_topic", schema=AnotherPayloadModel)
-    async def another_handler(data: AnotherPayloadModel) -> None:
+    async def another_handler(data: AnotherPayloadModel, context: dict[str, typing.Any]) -> None:
         handler_results.add_result(data)
+        assert context["some_key"] == "some_value"
 
-    timers = Timers(redis_client=redis_client)
+    timers = Timers(redis_client=redis_client, context={"some_key": "some_value"})
     timers.include_router(router1)
     timers.include_routers(router2)
 
