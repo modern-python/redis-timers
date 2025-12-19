@@ -83,7 +83,7 @@ The library is designed to be used as a dependency in other projects. To use it:
    router = Router()
    
    @router.handler(schema=MySchema)
-   async def my_timer_handler(data: MySchema):
+   async def my_timer_handler(data: MySchema, context: dict):
        # Handle timer event
        pass
    ```
@@ -157,7 +157,7 @@ Handlers are registered using decorators:
 
 ```python
 @router.handler(name="custom_name", schema=MySchema)
-async def my_handler(data: MySchema):
+async def my_handler(data: MySchema, context: dict):
     # Process timer event
     pass
 ```
