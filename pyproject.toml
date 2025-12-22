@@ -23,7 +23,7 @@ lint = [
     # linters
     "ruff",
     "mypy",
-    "end-of-file-fixer",
+    "eof-fixer",
     # stubs
     "types-redis",
 ]
