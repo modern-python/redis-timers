@@ -53,10 +53,8 @@ class Timers:
     def _convert_datetime_to_redis_format(datetime_point: datetime.datetime) -> str:
         return str(int(datetime_point.timestamp()))
 
-    async def _fetch_ready_timers(self) -> list[str]:
-        current_timestamp: typing.Final = self._convert_datetime_to_redis_format(
-            datetime.datetime.now(tz=TIMEZONE),
-        )
+    async def fetch_ready_timers(self, timestamp: datetime.datetime) -> list[str]:
+        current_timestamp: typing.Final = self._convert_datetime_to_redis_format(timestamp)
         return await self.redis_client.zrangebyscore(
             settings.TIMERS_TIMELINE_KEY,
             "-inf",
@@ -85,7 +83,7 @@ class Timers:
         await handler.handler(payload, self.context)
 
     async def handle_ready_timers(self) -> None:
-        ready_timers = await self._fetch_ready_timers()
+        ready_timers = await self.fetch_ready_timers(datetime.datetime.now(tz=TIMEZONE))
         for timer_key in ready_timers:
             lock = consume_lock(
                 redis_client=self.redis_client,
