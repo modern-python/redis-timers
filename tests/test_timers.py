@@ -1,4 +1,5 @@
 import datetime
+import logging
 import os
 import typing
 from collections.abc import AsyncGenerator
@@ -7,7 +8,7 @@ import pydantic
 import pytest
 from redis import asyncio as aioredis
 
-from redis_timers import Timers, settings
+from redis_timers import Timers, consume_lock, settings
 from redis_timers.router import Router
 
 
@@ -70,8 +71,7 @@ def timers_instance(redis_client: "aioredis.Redis[str]", handler_results: Handle
         handler_results.add_result(data)
         assert context["some_key"] == "some_value"
 
-    timers = Timers(redis_client=redis_client, context={"some_key": "some_value"})
-    timers.include_router(router1)
+    timers = Timers(redis_client=redis_client, context={"some_key": "some_value"}, routers=[router1])
     timers.include_routers(router2)
 
     return timers
@@ -104,6 +104,17 @@ async def test_set_and_remove_timer(timers_instance: Timers) -> None:
     assert not payloads_dict
 
 
+async def test_set_undefined_timer(timers_instance: Timers) -> None:
+    payload = SomePayloadModel(message="test", count=1)
+    with pytest.raises(RuntimeError, match="Handler is not found, topic='wrong_topic'"):
+        await timers_instance.set_timer(
+            topic="wrong_topic",
+            timer_id="test_timer_1",
+            payload=payload,
+            activation_period=datetime.timedelta(seconds=1),
+        )
+
+
 async def test_handle_ready_timers(timers_instance: Timers, handler_results: HandlerResults) -> None:
     payload = SomePayloadModel(message="ready_timer", count=42)
     await timers_instance.set_timer(
@@ -127,6 +138,74 @@ async def test_handle_ready_timers(timers_instance: Timers, handler_results: Han
     timeline_keys, payloads_dict = await timers_instance.fetch_all_timers()
     assert not timeline_keys
     assert not payloads_dict
+
+
+async def test_handle_ready_timer_no_handler(timers_instance: Timers, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO)
+    payload = SomePayloadModel(message="ready_timer", count=42)
+    await timers_instance.set_timer(
+        topic="some_topic",
+        timer_id="ready_timer_1",
+        payload=payload,
+        activation_period=datetime.timedelta(seconds=0),  # Ready immediately
+    )
+    del timers_instance.handlers_by_topics["some_topic"]
+    await timers_instance.handle_ready_timers()
+
+    assert len(caplog.records) == 1
+    assert "Handler is not found" in caplog.records[0].message
+
+
+async def test_handle_ready_timer_no_payload(timers_instance: Timers, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO)
+    payload = SomePayloadModel(message="ready_timer", count=42)
+    await timers_instance.set_timer(
+        topic="some_topic",
+        timer_id="ready_timer_1",
+        payload=payload,
+        activation_period=datetime.timedelta(seconds=0),  # Ready immediately
+    )
+    await timers_instance.redis_client.hdel(settings.TIMERS_PAYLOADS_KEY, "some_topic--ready_timer_1")
+    await timers_instance.handle_ready_timers()
+
+    assert len(caplog.records) == 1
+    assert "No payload found" in caplog.records[0].message
+
+
+async def test_handle_ready_timer_invalid_payload(timers_instance: Timers, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO)
+    payload = SomePayloadModel(message="ready_timer", count=42)
+    await timers_instance.set_timer(
+        topic="some_topic",
+        timer_id="ready_timer_1",
+        payload=payload,
+        activation_period=datetime.timedelta(seconds=0),  # Ready immediately
+    )
+    await timers_instance.redis_client.hset(settings.TIMERS_PAYLOADS_KEY, "some_topic--ready_timer_1", "{}")
+    await timers_instance.handle_ready_timers()
+
+    assert len(caplog.records) == 1
+    assert "Failed to parse payload" in caplog.records[0].message
+
+
+async def test_handle_ready_timer_locked(timers_instance: Timers, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG)
+    payload = SomePayloadModel(message="ready_timer", count=42)
+    await timers_instance.set_timer(
+        topic="some_topic",
+        timer_id="ready_timer_1",
+        payload=payload,
+        activation_period=datetime.timedelta(seconds=0),  # Ready immediately
+    )
+    lock = consume_lock(
+        redis_client=timers_instance.redis_client,
+        key="some_topic--ready_timer_1",
+    )
+    async with lock:
+        await timers_instance.handle_ready_timers()
+
+    assert len(caplog.records) == 1
+    assert "Timer is locked" in caplog.records[0].message
 
 
 async def test_handle_multiple_ready_timers(timers_instance: Timers, handler_results: HandlerResults) -> None:

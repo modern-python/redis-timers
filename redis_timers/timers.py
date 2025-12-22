@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import dataclasses
 import datetime
 import logging
 import random
@@ -26,11 +25,21 @@ logger = logging.getLogger(__name__)
 TIMEZONE = zoneinfo.ZoneInfo("UTC")
 
 
-@dataclasses.dataclass(kw_only=True, slots=True, frozen=True)
 class Timers:
-    redis_client: "aioredis.Redis[str]"
-    context: dict[str, typing.Any] = dataclasses.field(default_factory=dict)
-    handlers_by_topics: dict[str, Handler[typing.Any]] = dataclasses.field(default_factory=dict, init=False)
+    __slots__ = "context", "handlers_by_topics", "redis_client"
+
+    def __init__(
+        self,
+        *,
+        redis_client: "aioredis.Redis[str]",
+        context: dict[str, typing.Any],
+        routers: list[Router] | None = None,
+    ) -> None:
+        self.handlers_by_topics: dict[str, Handler[typing.Any]] = {}
+        self.redis_client = redis_client
+        self.context = context
+        if routers:
+            self.include_routers(*routers)
 
     def include_router(self, router: Router) -> None:
         for h in router.handlers:
@@ -83,6 +92,7 @@ class Timers:
                 key=timer_key,
             )
             if await lock.locked():
+                logger.debug(f"Timer is locked, {timer_key=}")
                 continue
 
             with contextlib.suppress(LockError):
@@ -90,7 +100,7 @@ class Timers:
                     await self._handle_one_timer(timer_key)
                     await self._remove_timer_by_key(timer_key)
 
-    async def run_forever(self) -> None:
+    async def run_forever(self) -> None:  # pragma: no cover
         while True:
             try:
                 await self.handle_ready_timers()
