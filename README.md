@@ -160,6 +160,7 @@ Redis Timers can be configured using environment variables:
 - `TIMERS_HANDLING_SLEEP`: Base sleep time between timer processing cycles (default: 0.05 seconds)
 - `TIMERS_HANDLING_JITTER_MIN_VALUE`: Minimum jitter multiplier (default: 0.5)
 - `TIMERS_HANDLING_JITTER_MAX_VALUE`: Maximum jitter multiplier (default: 2.0)
+- `TIMERS_CONCURRENT_PROCESSING_LIMIT`: Maximum number of timers processed concurrently (default: 5)
 - `TIMERS_SEPARATOR`: Separator used between topic and timer ID (default: "--")
 
 ## How It Works
