@@ -140,6 +140,33 @@ async def test_handle_ready_timers(timers_instance: Timers, handler_results: Han
     assert not payloads_dict
 
 
+async def test_handle_ready_timers_with_zero_limit(timers_instance: Timers, handler_results: HandlerResults) -> None:
+    old_value = settings.TIMERS_CONCURRENT_PROCESSING_LIMIT
+    settings.TIMERS_CONCURRENT_PROCESSING_LIMIT = 0
+
+    try:
+        payload = SomePayloadModel(message="ready_timer", count=42)
+        await timers_instance.set_timer(
+            topic="some_topic",
+            timer_id="ready_timer_1",
+            payload=payload,
+            activation_period=datetime.timedelta(seconds=0),  # Ready immediately
+        )
+
+        # Handle ready timers
+        await timers_instance.handle_ready_timers()
+
+        # Check that the handler was not called
+        assert len(handler_results.results) == 0
+
+        # Check that timer was not removed from Redis
+        timeline_keys, payloads_dict = await timers_instance.fetch_all_timers()
+        assert timeline_keys
+        assert payloads_dict
+    finally:
+        settings.TIMERS_CONCURRENT_PROCESSING_LIMIT = old_value
+
+
 async def test_handle_ready_timer_no_handler(timers_instance: Timers, caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO)
     payload = SomePayloadModel(message="ready_timer", count=42)

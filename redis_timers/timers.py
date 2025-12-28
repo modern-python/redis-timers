@@ -82,28 +82,37 @@ class Timers:
 
         await handler.handler(payload, self.context)
 
-    async def handle_ready_timers(self) -> None:
-        ready_timers = await self.fetch_ready_timers(datetime.datetime.now(tz=TIMEZONE))
-        for timer_key in ready_timers:
-            lock = consume_lock(
-                redis_client=self.redis_client,
-                key=timer_key,
-            )
-            if await lock.locked():
-                logger.debug(f"Timer is locked, {timer_key=}")
-                continue
+    async def _handle_one_timer_with_lock(self, timer_key: str) -> None:
+        lock = consume_lock(
+            redis_client=self.redis_client,
+            key=timer_key,
+        )
+        if await lock.locked():
+            logger.debug(f"Timer is locked, {timer_key=}")
+            return
 
-            with contextlib.suppress(LockError):
-                async with lock:
-                    await self._handle_one_timer(timer_key)
-                    await self._remove_timer_by_key(timer_key)
+        with contextlib.suppress(LockError):
+            async with lock:
+                await self._handle_one_timer(timer_key)
+                await self._remove_timer_by_key(timer_key)
+
+    async def handle_ready_timers(self) -> None:
+        ready_timers = await self.fetch_ready_timers(timestamp=datetime.datetime.now(tz=TIMEZONE))
+        tasks_number = 0
+        async with asyncio.TaskGroup() as tg:
+            for timer_key in ready_timers:
+                tasks_number += 1
+                if tasks_number > settings.TIMERS_CONCURRENT_PROCESSING_LIMIT:
+                    break
+
+                tg.create_task(self._handle_one_timer_with_lock(timer_key=timer_key))
 
     async def run_forever(self) -> None:  # pragma: no cover
         while True:
             try:
                 await self.handle_ready_timers()
             except aioredis.RedisError:
-                logger.exception("Timer haven't been consumed because of Redis error")  # pragma: no cover
+                logger.exception("Timer haven't been consumed because of Redis error")
             await asyncio.sleep(
                 settings.TIMERS_HANDLING_SLEEP
                 * random.uniform(settings.TIMERS_HANDLING_JITTER_MIN_VALUE, settings.TIMERS_HANDLING_JITTER_MAX_VALUE),  # noqa: S311
