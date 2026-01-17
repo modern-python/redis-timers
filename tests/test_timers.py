@@ -184,7 +184,7 @@ async def test_handle_ready_timer_no_handler(timers_instance: Timers, caplog: py
 
 
 async def test_handle_ready_timer_no_payload(timers_instance: Timers, caplog: pytest.LogCaptureFixture) -> None:
-    caplog.set_level(logging.INFO)
+    caplog.set_level(logging.DEBUG)
     payload = SomePayloadModel(message="ready_timer", count=42)
     await timers_instance.set_timer(
         topic="some_topic",
