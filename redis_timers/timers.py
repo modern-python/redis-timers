@@ -8,6 +8,7 @@ import zoneinfo
 
 import pydantic
 from redis import asyncio as aioredis
+from redis.asyncio import Redis
 from redis.exceptions import LockError
 
 from redis_timers import settings
@@ -31,7 +32,7 @@ class Timers:
     def __init__(
         self,
         *,
-        redis_client: "aioredis.Redis[str]",
+        redis_client: Redis,  # type: ignore[type-arg]
         context: dict[str, typing.Any],
         routers: list[Router] | None = None,
     ) -> None:
@@ -71,7 +72,7 @@ class Timers:
 
         raw_payload = await self.redis_client.hget(settings.TIMERS_PAYLOADS_KEY, timer_key)
         if not raw_payload:
-            logger.error(f"No payload found, {timer_key=}")
+            logger.debug(f"No payload found, seems like it was removed {timer_key=}")
             return
 
         try:
